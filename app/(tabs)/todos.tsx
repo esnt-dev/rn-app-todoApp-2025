@@ -1,180 +1,182 @@
-import { useTodosController } from "@/controllers/useTodosController";
-import { Todo } from "@/models/Todos";
-import React, { useState } from "react";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useAuth } from "@/src/presentation/hooks/useAuth";
+import { useTodos } from "@/src/presentation/hooks/useTodos";
 import {
-    FlatList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  createStyles,
+  defaultDarkTheme,
+  defaultLightTheme,
+} from "@/src/presentation/styles/todos.styles";
+import { useRouter } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function TodosScreen() {
-    const { todos, addTodo, toggleTodo, deleteTodo } = useTodosController();
-    const [inputText, setInputText] = useState("");
+export default function TodosScreenClean() {
+  const [inputText, setInputText] = useState("");
+  const { todos, loading, addTodo, toggleTodo, deleteTodo } = useTodos();
+  const { user: authUser, logout } = useAuth();
+  const router = useRouter();
 
-    const renderTodo = ({ item }: { item: Todo }) => (
-        <View style={styles.todoItem}>
-        <TouchableOpacity
-            onPress={() => toggleTodo(item.id)}
-            style={styles.todoContent}
-        >
-            <View
-            style={[
-                styles.checkbox,
-                item.completed && styles.checkboxChecked,
-            ]}
-            >
-            {item.completed && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text
-            style={[
-                styles.todoText,
-                item.completed && styles.todoTextCompleted,
-            ]}
-            >
-            {item.title}
-            </Text>
-        </TouchableOpacity>
+  // State local para forzar re-render cuando user cambia
+  const [user, setUser] = useState(authUser);
 
-        <TouchableOpacity onPress={() => deleteTodo(item.id)}>
-            <Text style={styles.deleteButtonText}>🚮</Text>
-        </TouchableOpacity>
+  // Mantener user actualizado automáticamente
+  useEffect(() => {
+    setUser(authUser);
+  }, [authUser]);
+
+  const colorScheme = useColorScheme();
+  const styles = useMemo(
+    () =>
+      createStyles(
+        colorScheme === "dark" ? defaultDarkTheme : defaultLightTheme
+      ),
+    [colorScheme, user] // Dependencia en user para re-render al actualizar nombre
+  );
+
+  const handleAddTodo = async () => {
+    if (!inputText.trim()) return;
+    const success = await addTodo(inputText);
+    if (success) setInputText("");
+  };
+
+  const handleLogout = async () => {
+    const success = await logout();
+    if (success) router.replace("/login");
+  };
+
+  const handleEditProfile = () => {
+    router.push("/profile"); // Navega a la pantalla de perfil
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={[styles.container, styles.centerContent]}>
+          <ActivityIndicator
+            size="large"
+            color={
+              colorScheme === "dark"
+                ? defaultDarkTheme.primary
+                : defaultLightTheme.primary
+            }
+          />
+          <Text style={styles.loadingText}>Cargando tareas...</Text>
         </View>
+      </SafeAreaView>
     );
+  }
+
+  const renderTodo = ({ item }: { item: any }) => {
+    const handleConfirmDelete = () => {
+      Alert.alert(
+        "Confirmar",
+        "¿Estás seguro de que deseas eliminar esta tarea?",
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Eliminar",
+            style: "destructive",
+            onPress: () => deleteTodo(item.id),
+          },
+        ]
+      );
+    };
 
     return (
-        <View style={styles.container}>
-        <Text style={styles.title}> Mis Tareas </Text>
+      <View style={styles.todoItem}>
+        <TouchableOpacity
+          style={styles.todoContent}
+          onPress={() => toggleTodo(item.id)}
+        >
+          <View
+            style={[styles.checkbox, item.completed && styles.checkboxChecked]}
+          >
+            {item.completed && <Text style={styles.checkmark}>✓</Text>}
+          </View>
+          <Text
+            style={[styles.todoText, item.completed && styles.todoTextCompleted]}
+          >
+            {item.title}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={handleConfirmDelete}
+          style={styles.deleteButton}
+        >
+          <Text style={styles.deleteButtonText}>🗑️</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.userAvatarPlaceholder}>
+            <Text style={styles.userAvatarText}>
+              {user?.displayName?.charAt(0) || "U"}
+            </Text>
+          </View>
+
+          <Text style={styles.userName}>{user?.displayName || "Usuario"}</Text>
+
+          {/* BOTÓN: Editar Perfil */}
+          <TouchableOpacity
+            onPress={handleEditProfile}
+            style={[styles.logoutButton, { backgroundColor: "#4CAF50", marginRight: 8 }]}
+          >
+            <Text style={[styles.logoutText, { color: "#fff" }]}>Editar Perfil</Text>
+          </TouchableOpacity>
+
+          {/* BOTÓN: Salir */}
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+            <Text style={styles.logoutText}>Salir</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.title}>Mis Tareas</Text>
+
         <View style={styles.inputContainer}>
-            <TextInput
+          <TextInput
             style={styles.input}
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Nueva Tarea.."
-            placeholderTextColor="#999"
-            />
-            <TouchableOpacity
-            style={styles.addButton}
-            onPress={async () => {
-                await addTodo(inputText);
-                setInputText("");
-            }}
-
-            >
+            placeholder="Nueva tarea..."
+            placeholderTextColor={
+              colorScheme === "dark"
+                ? defaultDarkTheme.placeholder
+                : defaultLightTheme.placeholder
+            }
+          />
+          <TouchableOpacity style={styles.addButton} onPress={handleAddTodo}>
             <Text style={styles.addButtonText}>+</Text>
-            </TouchableOpacity>
+          </TouchableOpacity>
         </View>
+
         <FlatList
-            data={todos}
-            renderItem={renderTodo}
-            keyExtractor={(item) => item.id.toString()}
-            style={styles.list}
-            contentContainerStyle={styles.listContent}
+          data={todos}
+          renderItem={renderTodo}
+          keyExtractor={(item) => item.id.toString()}
+          style={styles.list}
+          contentContainerStyle={[styles.listContent, { paddingBottom: 80 }]}
         />
+
         <Text style={styles.footer}>
-        Total: {todos.length} | Completadas: {""}
-        {todos.filter(t => t.completed).length}
+          Total: {todos.length} | Completadas:{" "}
+          {todos.filter((t) => t.completed).length}
         </Text>
-        </View>
-    );
-
+      </View>
+    </SafeAreaView>
+  );
 }
-
-
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#f5f5f5",
-        padding: 20,
-    },
-    title: {
-        fontSize: 32,
-        fontWeight: "bold",
-        marginBottom: 20,
-        marginTop: 40,
-    },
-    inputContainer: {
-        flexDirection: "row",
-        marginBottom: 20,
-    },
-    input: {
-        flex: 1,
-        backgroundColor: "white",
-        padding: 15,
-        borderRadius: 10,
-        fontSize: 16,
-        marginRight: 10,
-    },
-    addButton: {
-        backgroundColor: "#007AFF",
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    addButtonText: {
-        color: "white",
-        fontSize: 30,
-        fontWeight: "bold",
-    },
-    list: {
-        flex: 1,
-    },
-    listContent: {
-        paddingBottom: 20,
-    },
-    todoItem: {
-        flexDirection: "row",
-        backgroundColor: "white",
-        padding: 15,
-        borderRadius: 10,
-        marginBottom: 10,
-        alignItems: "center",
-    },
-    todoContent: {
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "center",
-    },
-    checkbox: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: "#007AFF",
-        marginRight: 12,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    checkboxChecked: {
-        backgroundColor: "#007AFF",
-    },
-    checkmark: {
-        color: "white",
-        fontSize: 16,
-        fontWeight: "bold",
-    },
-    todoText: {
-        fontSize: 16,
-        flex: 1,
-    },
-    todoTextCompleted: {
-        textDecorationLine: "line-through",
-        color: "#999",
-    },
-    deleteButton: {
-        padding: 8,
-    },
-    deleteButtonText: {
-        fontSize: 20,
-    },
-    footer: {
-        textAlign: "center",
-        color: "#666",
-        marginTop: 10,
-        fontSize: 14,
-    },
-})

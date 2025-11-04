@@ -1,24 +1,94 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+// RootLayout.tsx
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
+} from "@react-navigation/native";
+import { useFonts } from "expo-font";
+import { Stack, useRouter, useSegments } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
+import "react-native-reanimated";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { container } from "@/src/di/container";
+import { AuthProvider, useAuth } from "@/src/presentation/context/AuthContext";
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
 
-export default function RootLayout() {
+SplashScreen.preventAutoHideAsync();
+
+function RootLayoutContent() {
   const colorScheme = useColorScheme();
+  const [loaded] = useFonts({
+    SpaceMono: require("@/assets/fonts/SpaceMono-BoldItalic.ttf"),
+  });
+
+  const [containerReady, setContainerReady] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  // Inicializar el container
+  useEffect(() => {
+    const initContainer = async () => {
+      await container.initialize();
+      setContainerReady(true);
+    };
+    initContainer();
+  }, []);
+
+  // Manejar redirección según el estado de auth
+  useEffect(() => {
+    if (!containerReady || authLoading) return; // espera a que todo esté listo
+
+    const inAuthGroup =
+      segments[0] === "(tabs)" &&
+      (segments[1] === "login" ||
+        segments[1] === "register" ||
+        segments[1] === "forgot-password");
+
+    if (!user && !inAuthGroup) {
+      router.replace("/(tabs)/login");
+    } else if (user && inAuthGroup) {
+      router.replace("/(tabs)/todos");
+    }
+  }, [user, segments, containerReady, authLoading, router]);
+
+  // Ocultar splash screen solo cuando todo esté listo
+  useEffect(() => {
+    if (loaded && containerReady && !authLoading) {
+      SplashScreen.hideAsync();
+    }
+  }, [loaded, containerReady, authLoading]);
+
+  if (!loaded || !containerReady || authLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)/login" />
+        <Stack.Screen name="(tabs)/register" />
+        <Stack.Screen name="(tabs)/forgot-password" />
+        <Stack.Screen name="(tabs)/todos" />
+        <Stack.Screen name="(tabs)/profile" />
+        <Stack.Screen name="(tabs)/password" />
       </Stack>
-      <StatusBar style="auto" />
     </ThemeProvider>
+  );
+}
+
+// ✅ AuthProvider en el nivel superior
+export default function RootLayout() {
+  return (
+    <AuthProvider>
+      <RootLayoutContent />
+    </AuthProvider>
   );
 }
